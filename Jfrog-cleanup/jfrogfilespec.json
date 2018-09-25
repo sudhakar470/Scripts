@@ -1,0 +1,1 @@
+{ "files": [ { "aql": { "items.find": { "type": { "$eq" : "file" }, "repo":{"$eq":"exp-repo"}, "path" : { "$eq" :"my/foder/path" }, "name":{"$match":"*"}  } } } ] }

@@ -1,0 +1,125 @@
+import hudson.matrix.*
+import jenkins.model.*;
+import com.cloudbees.hudson.plugins.folder.*
+
+def skipJobs = [ 'Testur' ]//add jobs in the list that need to be skipped
+def nodes = [ 'node6', 'node2' ]//list vm's, were the workspaces will deleted
+
+deletedJobs = [:]
+skippedJobs = [:]
+emailBody = ""
+
+env.EMAIL_RECIPIENT_LIST="tarakant.sethy@gmail.com"
+
+emailBody = "<style>#tabfam {font-family: \"Trebuchet MS\", Arial, Helvetica, sans-serif;border-collapse: collapse;width: 80%;}#tabfam td, #tabfam th {border: 1px solid #ddd;padding: 8px;background-color: #f2f2f2;}#tabfam th {padding-top: 12px; padding-bottom: 12px;text-align: left;background-color: #898483;color: white;}</style><p><h1>Clean Job Status</h1><P><table id=\"tabfam\"><tr><th>Node Name</th><th>JobName</th><th>workSpace</th><th>Deleted</th></tr>"
+
+// def createEmailBody() {
+//   //send email here
+//   emailBody = "<style>#tabfam {font-family: \"Trebuchet MS\", Arial, Helvetica, sans-serif;border-collapse: collapse;width: 80%;}#tabfam td, #tabfam th {border: 1px solid #ddd;padding: 8px;background-color: #f2f2f2;}#tabfam th {padding-top: 12px; padding-bottom: 12px;text-align: left;background-color: #898483;color: white;}</style><p><h1>Clean Job Status</h1><P>"
+//   emailBody += "<table id=\"tabfam\"><tr><th>JobName</th><th>workSpace</th><th>Deleted</th></tr>"
+//   for ( e in deletedJobs ) {
+//     emailBody += "<tr><td>" + "${e.key}" + "</td><td>" + "${e.value}" + "</td><td>" + "Yes"+ "</td></tr>"
+//   }
+//   emailBody +="</table>"
+// }
+
+def deleteRemote(def path, boolean deleteContentsOnly) {
+  boolean result = true
+  def pathAsString = path.getRemote()
+  if (path.exists()) {
+    try {
+      if (deleteContentsOnly) {
+        path.deleteContents()
+        println ".... deleted ALL contents of ${pathAsString}"
+        } else {
+         path.deleteRecursive()
+         println ".... deleted directory ${pathAsString}"
+       }
+       } catch (Throwable t) {
+        println "Failed to delete ${pathAsString}: ${t}"
+        result = false
+      }
+    }
+    return result
+}//deleteRemote
+
+pipeline {
+  agent none
+    stages {
+      stage('Cleaning up Workspaces') {
+        steps {
+          parallel (
+            "cleaning up" : {
+              node('node-6') { //Whcih node the job will run
+                script {
+                  for (node in Jenkins.instance.nodes) {
+                    try {
+                      computer = node.toComputer()
+                      if ( node.getDisplayName() in nodes ) {
+                        println("Checking for workspace on Node :: " + node.getDisplayName())
+                        if (computer.getChannel() == null) {
+                          continue
+                        }
+                        Jenkins.getInstance().getAllItems().each {
+                          if ( it instanceof Job && !it.isBuilding() ) {
+                            if ( it.getName() in skipJobs ) {
+                              //DO NOTHING 
+                              println("Skipping job :: " + it.getName())
+                              //skippedJobs[node.getWorkspaceFor(it)] = it.getName()
+                              skippedJobs[it.getName()] = node.getWorkspaceFor(it)
+                              emailBody += "<tr><td>" + node.getDisplayName() +"</td><td>" + it.getName() + "</td><td>" + node.getWorkspaceFor(it) + "</td><td>" + "No"+ "</td></tr>"
+                              } else {
+                                //DELETE WORKSPACE
+                                //deletedJobs[node.getWorkspaceFor(it)] = it.getName()
+                                //deletedJobs[it.getName()] = node.getWorkspaceFor(it)
+                                deleteRemote(node.getWorkspaceFor(it), true)
+                                emailBody += "<tr><td>" + node.getDisplayName() +"</td><td>" + it.getName() + "</td><td>" + node.getWorkspaceFor(it) + "</td><td>" + "Yes"+ "</td></tr>"
+                              }
+                            }
+                          }
+                          } else {
+                            println("Skipping node :: " + node.getDisplayName())
+                          }
+                          } catch ( Throwable t ) {
+                            println "Error with ${node.displayName}: ${it}"
+                          }
+                        }
+                      }//script
+                    }//node
+                  }
+                  )//parallel
+        }//steps
+      }//stage
+    }//stages
+post {
+  success {
+    //createEmailBody()
+
+    emailext([
+      mimeType: 'text/html',
+      to: "${env.EMAIL_RECIPIENT_LIST}",
+      subject: "SUCCESS - ${env.JOB_BASE_NAME} Build #${env.BUILD_NUMBER}",
+      body: emailBody,
+       ])
+    }//success
+  aborted {
+    emailext([
+      mimeType: 'text/html',
+      to: "${env.EMAIL_RECIPIENT_LIST}",
+      subject: "ABORTED - ${env.JOB_BASE_NAME} Build #${env.BUILD_NUMBER}",
+      body: "<font color=red>Build Aborted at <b>Stage - ${env.STAGE_NAME}</b></font>",
+      ])
+    }//aborted
+  failure {
+    emailext([
+      mimeType: 'text/html',
+      to: "${env.EMAIL_RECIPIENT_LIST}",
+      subject: "Failed - Build #${env.BUILD_NUMBER}  ${env.JOB_BASE_NAME}",
+      body: "Build Started by: ${env.USER} (${env.USER_ID})<BR><BR> <b>Failed at Stage - ${env.STAGE_NAME}</b><BR><BR> Failure: ${env.RUN_DISPLAY_URL}<BR><BR><b>New",
+      ])
+    }//failure
+  }//post
+}//pipeline
+//println("Skipped Jobs workspace :: " + skippedJobs)
+//println("Deleted Jobs workspace :: " + deletedJobs)
+//println("emailBody :: " + emailBody)

@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#must install the below dependencies to work
 # dependencies, jq and parallel:
 # sudo yum install jq
 # sudo yum install parallel

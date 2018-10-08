@@ -7,12 +7,6 @@
 #    2. Initiate a multipart upload.
 #    3. Upload each part individually.
 #    4. Calculate the file's tree hash and finish the upload.
-#
-# See: http://amzn.to/1RjTwYk
-#
-# Author: Damien Radtke <damienradtke at gmail dot com>
-# License: WTFPL
-
 # Set this to the name of the Glacier vault to upload to.
 VAULT_NAME=sudhakar
 # 1 MiB in bytes; the tree hash algorithm requires chunks of this
